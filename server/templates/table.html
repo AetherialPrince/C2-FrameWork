@@ -1,39 +1,122 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>{{ title }}</title>
+    <title>C2 Logs - {{ title }}</title>
     <style>
-        body { font-family: Arial, sans-serif; padding: 20px; }
-        table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
-        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-        th { background-color: #f2f2f2; }
-        .no-data { color: #999; }
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f5f5f5; }
+        .container { max-width: 1400px; margin: 0 auto; background: white; padding: 20px; border-radius: 5px; }
+        h1 { color: #333; border-bottom: 2px solid #4CAF50; padding-bottom: 10px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th { background-color: #4CAF50; color: white; padding: 12px; text-align: left; }
+        td { padding: 10px; border-bottom: 1px solid #ddd; }
+        tr:hover { background-color: #f5f5f5; }
+        .status-active { color: green; font-weight: bold; }
+        .status-closed { color: #666; }
+        .nav { margin-bottom: 20px; }
+        .nav a { margin-right: 15px; text-decoration: none; color: #4CAF50; }
+        .nav a:hover { text-decoration: underline; }
+        .timestamp { color: #666; font-size: 0.9em; }
+        .empty { text-align: center; padding: 40px; color: #666; }
+        .fingerprint { font-family: monospace; font-size: 0.9em; }
+        .context-interact { color: #2196F3; }
+        .context-broadcast { color: #FF9800; font-weight: bold; }
     </style>
 </head>
 <body>
-    <h1>{{ title }}</h1>
-    {% if rows %}
-    <table>
-        <thead>
-            <tr>
-                {% for col in rows[0].keys() %}
-                <th>{{ col }}</th>
+    <div class="container">
+        <div class="nav">
+            <a href="/">Home</a>
+            <a href="/sessions">Sessions</a>
+            <a href="/commands">Commands</a>
+            <a href="/responses">Responses</a>
+            <a href="/file_transfers">File Transfers</a>
+        </div>
+        
+        <h1>{{ title }}</h1>
+        <p class="timestamp">Last updated: {{ time }}</p>
+        
+        {% if rows %}
+        <table>
+            <thead>
+                <tr>
+                    {% if table_name == 'sessions' %}
+                        <th>ID</th>
+                        <th>Client ID</th>
+                        <th>Fingerprint</th>
+                        <th>IP:Port</th>
+                        <th>Opened</th>
+                        <th>Closed</th>
+                        <th>Status</th>
+                    {% elif table_name == 'commands' %}
+                        <th>ID</th>
+                        <th>Client ID</th>
+                        <th>Command</th>
+                        <th>Context</th>
+                        <th>Timestamp</th>
+                    {% elif table_name == 'responses' %}
+                        <th>ID</th>
+                        <th>Client ID</th>
+                        <th>Response</th>
+                        <th>Timestamp</th>
+                    {% elif table_name == 'file_transfers' %}
+                        <th>ID</th>
+                        <th>Client ID</th>
+                        <th>Direction</th>
+                        <th>Filename</th>
+                        <th>Size</th>
+                        <th>Context</th>
+                        <th>Timestamp</th>
+                    {% endif %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                <tr>
+                    {% if table_name == 'sessions' %}
+                        <td>{{ row.id }}</td>
+                        <td>{{ row.client_id }}</td>
+                        <td class="fingerprint">{{ row.fingerprint[:16] if row.fingerprint and row.fingerprint != 'Legacy' else 'Legacy' }}</td>
+                        <td>{{ row.ip }}:{{ row.port }}</td>
+                        <td>{{ row.opened }}</td>
+                        <td>{{ row.closed if row.closed else 'Active' }}</td>
+                        <td class="status-{{ row.status.lower() }}">{{ row.status }}</td>
+                    {% elif table_name == 'commands' %}
+                        <td>{{ row.id }}</td>
+                        <td>{{ row.client_id }}</td>
+                        <td>{{ row.command }}</td>
+                        <td class="context-{{ row.context or 'interact' }}">
+                            {{ 'Broadcast' if row.context == 'broadcast' else 'Interactive' }}
+                        </td>
+                        <td>{{ row.timestamp }}</td>
+                    {% elif table_name == 'responses' %}
+                        <td>{{ row.id }}</td>
+                        <td>{{ row.client_id }}</td>
+                        <td>{{ row.response }}</td>
+                        <td>{{ row.timestamp }}</td>
+                    {% elif table_name == 'file_transfers' %}
+                        <td>{{ row.id }}</td>
+                        <td>{{ row.client_id }}</td>
+                        <td>{{ row.direction }}</td>
+                        <td>{{ row.filename }}</td>
+                        <td>{{ row.size }} bytes</td>
+                        <td class="context-{{ row.context or 'interact' }}">
+                            {{ 'Broadcast' if row.context == 'broadcast' else 'Interactive' }}
+                        </td>
+                        <td>{{ row.timestamp }}</td>
+                    {% endif %}
+                </tr>
                 {% endfor %}
-            </tr>
-        </thead>
-        <tbody>
-            {% for row in rows %}
-            <tr>
-                {% for val in row %}
-                <td>{{ val }}</td>
-                {% endfor %}
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    {% else %}
-    <p class="no-data">No data available.</p>
-    {% endif %}
-    <p><a href="/">Back to menu</a></p>
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty">
+            <p>No data available in {{ table_name }} table.</p>
+        </div>
+        {% endif %}
+        
+        <div class="nav" style="margin-top: 30px;">
+            <a href="/">Back to menu</a>
+        </div>
+    </div>
 </body>
 </html>

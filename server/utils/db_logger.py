@@ -37,12 +37,13 @@ def init_db(db_path):
         )
     """)
     
-    # Commands table
+    # Commands table - ADDED context column
     cur.execute("""
         CREATE TABLE IF NOT EXISTS commands (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             client_id INTEGER,
             command TEXT,
+            context TEXT DEFAULT 'interact',
             timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (client_id) REFERENCES clients(id)
         )
@@ -59,7 +60,7 @@ def init_db(db_path):
         )
     """)
     
-    # File transfers table
+    # File transfers table - ADDED context column
     cur.execute("""
         CREATE TABLE IF NOT EXISTS file_transfers (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -67,6 +68,7 @@ def init_db(db_path):
             direction TEXT,
             filename TEXT,
             size INTEGER,
+            context TEXT DEFAULT 'interact',
             timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (client_id) REFERENCES clients(id)
         )
@@ -146,23 +148,26 @@ def record_session_close(conn, client_id):
     """, (client_id,))
     conn.commit()
 
-def record_command(conn, client_id, cmd):
+def record_command(conn, client_id, cmd, context="interact"):
+    """Record command with context."""
     conn.execute(
-        "INSERT INTO commands (client_id, command) VALUES (?, ?)",
-        (client_id, cmd)
+        "INSERT INTO commands (client_id, command, context) VALUES (?, ?, ?)",
+        (client_id, cmd, context)
     )
     conn.commit()
 
 def record_response(conn, client_id, data):
+    """Record response from client."""
     conn.execute(
         "INSERT INTO responses (client_id, response) VALUES (?, ?)",
         (client_id, data)
     )
     conn.commit()
 
-def record_file_transfer(conn, client_id, direction, name, size):
+def record_file_transfer(conn, client_id, direction, name, size, context="interact"):
+    """Record file transfer with context."""
     conn.execute(
-        "INSERT INTO file_transfers (client_id, direction, filename, size) VALUES (?, ?, ?, ?)",
-        (client_id, direction, name, size)
+        "INSERT INTO file_transfers (client_id, direction, filename, size, context) VALUES (?, ?, ?, ?, ?)",
+        (client_id, direction, name, size, context)
     )
     conn.commit()

