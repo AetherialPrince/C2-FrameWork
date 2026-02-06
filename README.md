@@ -23,7 +23,7 @@ Supports encrypted communications, tasking, file transfer, and remote command ex
 Python 3.10+
 
 ## Installation
-git clone https://github.com/yourname/c2-framework.git
+git clone https://github.com/AetherialPrince/c2-framework.git
 cd c2-framework
 pip install -r requirements.txt
 
